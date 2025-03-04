@@ -1,4 +1,3 @@
-// AnimalTray.tsx
 import React from 'react';
 import { View, Text, ScrollView, Image, StyleSheet } from 'react-native';
 import { DraxView } from 'react-native-drax';
@@ -6,30 +5,36 @@ import { DraxView } from 'react-native-drax';
 type SeaAnimal = {
   id: string;
   name: string;
-  image: any;      // require(...) for the colored image
-  silhouette: any; // require(...) for the silhouette
+  image: any;
+  silhouette?: any;
 };
 
 interface AnimalTrayProps {
   animals: SeaAnimal[];
+  placedAnimals?: string[];
 }
 
-export function AnimalTray({ animals }: AnimalTrayProps) {
-  // Renders each animal as a draggable item
+export function AnimalTray({ animals, placedAnimals = [] }: AnimalTrayProps) {
+  // Render only animals that have not yet been placed
   const renderAnimals = () => {
-    return animals.map((animal) => (
-      <DraxView
-        key={`drag-${animal.id}`}
-        style={styles.draggableItem}
-        draggingStyle={styles.draggingStyle}
-        dragReleasedStyle={styles.dragReleasedStyle}
-        dragPayload={animal.id}
-        longPressDelay={100}
-      >
-        <Image source={animal.image} style={styles.animalIcon} />
-        <Text style={styles.animalLabel}>{animal.name}</Text>
-      </DraxView>
-    ));
+    return animals
+      .filter((animal) => !placedAnimals.includes(animal.id))
+      .map((animal) => (
+        <DraxView
+          key={`drag-${animal.id}`}
+          style={styles.draggableItem}
+          draggingStyle={styles.draggingStyle}
+          dragReleasedStyle={styles.dragReleasedStyle}
+          dragPayload={animal.id}
+          longPressDelay={100}
+          onDragEnd={(event) => {
+            console.log(`Drag ended for: ${animal.id}`, event);
+          }}
+        >
+          <Image source={animal.image} style={styles.animalIcon} />
+          <Text style={styles.animalLabel}>{animal.name}</Text>
+        </DraxView>
+      ));
   };
 
   return (
@@ -48,16 +53,15 @@ export function AnimalTray({ animals }: AnimalTrayProps) {
 const styles = StyleSheet.create({
   trayContainer: {
     backgroundColor: '#fff',
-    height: 200, // fixed height for the tray
-    paddingVertical: 10,
+    height: 250,
+    overflow: 'visible',
   },
   scrollContent: {
-    // centers the row of items vertically
     alignItems: 'center',
     paddingHorizontal: 8,
+    overflow: 'visible',
   },
   draggableItem: {
-    // remove fixed height so text can fit below image
     marginHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'flex-start',
@@ -72,7 +76,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     resizeMode: 'contain',
-    marginBottom: 4, // space between image and text
+    marginBottom: 4,
   },
   animalLabel: {
     fontSize: 12,

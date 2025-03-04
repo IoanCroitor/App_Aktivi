@@ -1,25 +1,20 @@
-// OceanMapScreen.tsx
 import React, { useState } from 'react';
 import {
   View,
-  Text,
-  StyleSheet,
   Image,
+  StyleSheet,
   ScrollView,
   useWindowDimensions,
 } from 'react-native';
-import {
-  DraxProvider,
-  DraxView,
-} from 'react-native-drax';
+import { DraxProvider, DraxView } from 'react-native-drax';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { AnimalTray } from './AnimalTray'; // import the tray component
+import { AnimalTray } from './AnimalTray';
 
 type SeaAnimal = {
   id: string;
   name: string;
-  image: any;      // require(...) for the colored image
-  silhouette: any; // require(...) for the silhouette
+  image: any;
+  // Each animal's correct position on the map
   position: { top: number; left: number };
 };
 
@@ -31,30 +26,33 @@ export default function OceanMapScreen() {
       id: 'whale',
       name: 'Blue Whale',
       image: require('@/assets/images/Sea/1.png'),
-      silhouette: require('@/assets/images/Sea/1.png'),
       position: { top: 600, left: 50 },
     },
     {
       id: 'shark',
       name: 'Shark',
       image: require('@/assets/images/Sea/2.png'),
-      silhouette: require('@/assets/images/Sea/2.png'),
       position: { top: 300, left: 180 },
     },
-    // ... more animals
+    // ... add more animals as needed
   ]);
 
-  // Track which animals have been correctly placed
+  // Track which animals have been correctly placed on the map
   const [placedAnimals, setPlacedAnimals] = useState<string[]>([]);
 
-  // Handle dropping an animal onto the correct silhouette
+  // When an animal is dropped into its correct drop zone, mark it as placed
   const handleReceiveDrop = (draggedAnimalId: string, dropZoneAnimalId: string) => {
+    console.log(`Attempting drop: dragged ${draggedAnimalId} onto ${dropZoneAnimalId}`);
     if (draggedAnimalId === dropZoneAnimalId) {
+      console.log(`Successful drop for: ${draggedAnimalId}`);
       setPlacedAnimals((prev) => [...prev, draggedAnimalId]);
+    } else {
+      console.log(`Drop failed: ${draggedAnimalId} does not match ${dropZoneAnimalId}`);
     }
   };
 
-  // Render silhouettes or colored images on the map
+  // Render drop zones at the positions defined by each animal.
+  // When an animal is correctly dropped, its image appears in the drop zone.
   const renderDropZones = () => {
     return animals.map((animal) => {
       const isPlaced = placedAnimals.includes(animal.id);
@@ -67,16 +65,16 @@ export default function OceanMapScreen() {
           ]}
           animateSnapback={false}
           onReceiveDragDrop={(event) => {
+            console.log('Drop event on zone for:', animal.id, event);
             const draggedId = event.dragged?.payload;
             if (draggedId) {
               handleReceiveDrop(draggedId, animal.id);
             }
           }}
         >
-          <Image
-            source={isPlaced ? animal.image : animal.silhouette}
-            style={styles.animalSilhouette}
-          />
+          {isPlaced && (
+            <Image source={animal.image} style={styles.animalImage} />
+          )}
         </DraxView>
       );
     });
@@ -86,10 +84,7 @@ export default function OceanMapScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <DraxProvider>
         <View style={styles.container}>
-          {/* 
-            A ScrollView that contains the tall map so you can scroll vertically.
-            The map is as wide as the screen (width) and very tall (height: 2000 as example).
-          */}
+          {/* The map is placed in a ScrollView so that users can scroll vertically */}
           <ScrollView style={styles.mapScroll} contentContainerStyle={styles.mapScrollContent}>
             <View style={[styles.mapWrapper, { width }]}>
               <Image
@@ -100,8 +95,10 @@ export default function OceanMapScreen() {
             </View>
           </ScrollView>
 
-          {/* Bottom tray: pinned, always visible */}
-          <AnimalTray animals={animals} />
+          {/* The tray is overlayed at the bottom of the screen */}
+          <View style={styles.trayOverlay}>
+            <AnimalTray animals={animals} placedAnimals={placedAnimals} />
+          </View>
         </View>
       </DraxProvider>
     </GestureHandlerRootView>
@@ -116,17 +113,15 @@ const styles = StyleSheet.create({
   mapScroll: {
     flex: 1,
   },
+  // Add some bottom padding so the scrollable map does not get hidden behind the tray
   mapScrollContent: {
-    // If you want extra padding or spacing, you can add it here
+    paddingBottom: 150,
   },
   mapWrapper: {
     position: 'relative',
-    // The height here determines how "tall" your map is, so you can scroll down
-    height: 1000, // for example, 2000 px tall
+    height: 1000, // adjust as needed for your map
   },
   oceanMapImage: {
-    // Make the image fill the entire wrapper (width x 2000 tall),
-    // but "contain" ensures you see the entire map
     width: '100%',
     height: '100%',
     resizeMode: 'contain',
@@ -138,10 +133,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  animalSilhouette: {
+  animalImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'contain',
-    opacity: 0.7,
+  },
+  // Overlay the tray fixed at the bottom
+  trayOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
 });

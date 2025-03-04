@@ -1,148 +1,273 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
-  Image,
+  Text,
   StyleSheet,
+  Image,
+  PanResponder,
+  Animated,
+  Dimensions,
   ScrollView,
-  useWindowDimensions,
 } from 'react-native';
-import { DraxProvider, DraxView } from 'react-native-drax';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { AnimalTray } from './AnimalTray';
 
-type SeaAnimal = {
-  id: string;
-  name: string;
-  image: any;
-  // Each animal's correct position on the map
-  position: { top: number; left: number };
+const IMAGES = [
+  require('@/assets/images/Sea/1.png'),
+  require('@/assets/images/Sea/2.png'),
+  require('@/assets/images/Sea/3.png'),
+  require('@/assets/images/Sea/4.png'),
+  require('@/assets/images/Sea/5.png'),
+  require('@/assets/images/Sea/6.png'),
+  require('@/assets/images/Sea/7.png'),
+  require('@/assets/images/Sea/8.png'),
+  require('@/assets/images/Sea/9.png'),
+  require('@/assets/images/Sea/10.png'),
+];
+
+const { width, height } = Dimensions.get('window');
+
+const ITEM_SIZE = 80;  
+const TRAY_HEIGHT = 200;
+const TRASH_SIZE = 30;
+const MAP_CONTENT_HEIGHT = 1000;
+
+// Position the trash box on the left, right above the tray
+const trashBoxLeft = 20;
+const trashBoxTop = height - TRAY_HEIGHT - TRASH_SIZE;
+
+const trashBox = {
+  x: trashBoxLeft,
+  y: trashBoxTop,
+  width: TRASH_SIZE,
+  height: TRASH_SIZE,
 };
 
-export default function OceanMapScreen() {
-  const { width } = useWindowDimensions();
+type AnimalData = {
+  id: number;
+  image: any;
+  inTray: boolean;
+  pan: Animated.ValueXY;
+};
 
-  const [animals] = useState<SeaAnimal[]>([
-    {
-      id: 'whale',
-      name: 'Blue Whale',
-      image: require('@/assets/images/Sea/1.png'),
-      position: { top: 600, left: 50 },
-    },
-    {
-      id: 'shark',
-      name: 'Shark',
-      image: require('@/assets/images/Sea/2.png'),
-      position: { top: 300, left: 180 },
-    },
-    // ... add more animals as needed
-  ]);
+export default function PanResponderScrollExample() {
+  const [isDragging, setIsDragging] = useState(false);
 
-  // Track which animals have been correctly placed on the map
-  const [placedAnimals, setPlacedAnimals] = useState<string[]>([]);
+  // Track how far the map is scrolled
+  const [scrollY, setScrollY] = useState(0);
 
-  // When an animal is dropped into its correct drop zone, mark it as placed
-  const handleReceiveDrop = (draggedAnimalId: string, dropZoneAnimalId: string) => {
-    console.log(`Attempting drop: dragged ${draggedAnimalId} onto ${dropZoneAnimalId}`);
-    if (draggedAnimalId === dropZoneAnimalId) {
-      console.log(`Successful drop for: ${draggedAnimalId}`);
-      setPlacedAnimals((prev) => [...prev, draggedAnimalId]);
-    } else {
-      console.log(`Drop failed: ${draggedAnimalId} does not match ${dropZoneAnimalId}`);
+  // Initialize 10 animals
+  const [animals, setAnimals] = useState<AnimalData[]>(() =>
+    IMAGES.map((img, index) => ({
+      id: index + 1,
+      image: img,
+      inTray: true,
+      pan: new Animated.ValueXY({
+        x: width / 2 - ITEM_SIZE / 2,
+        y: height / 2 - ITEM_SIZE / 2,
+      }),
+    }))
+  );
+
+  // Store a PanResponder for each animal
+  const panResponders = useRef<{ [key: number]: PanResponder }>(() => ({})).current;
+
+  // Check if a point (x,y) is within the trash box
+  const isInTrashBox = (x: number, y: number) => {
+    return (
+      x >= trashBox.x &&
+      x <= trashBox.x + trashBox.width &&
+      y >= trashBox.y &&
+      y <= trashBox.y + trashBox.height
+    );
+  };
+
+  animals.forEach((animal) => {
+    if (!panResponders[animal.id]) {
+      panResponders[animal.id] = PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+
+        onPanResponderGrant: () => {
+          setIsDragging(true);
+
+          // If the animal is in the tray, move it onto the map
+          if (animal.inTray) {
+            setAnimals((prev) =>
+              prev.map((a) =>
+                a.id === animal.id ? { ...a, inTray: false } : a
+              )
+            );
+          }
+          animal.pan.extractOffset();
+        },
+
+        onPanResponderMove: Animated.event(
+          [null, { dx: animal.pan.x, dy: animal.pan.y }],
+          { useNativeDriver: false }
+        ),
+
+        onPanResponderRelease: () => {
+          setIsDragging(false);
+          // Merge offset so the item stays at its release position
+          animal.pan.flattenOffset();
+
+          // Convert local offsets to screen coordinates by adding scrollY
+          const finalX = (animal.pan.x as any).__getValue();
+          const finalY = (animal.pan.y as any).__getValue() + scrollY;
+
+          // If it's dropped inside the trash box, reset to tray
+          if (isInTrashBox(finalX, finalY)) {
+            animal.pan.setValue({
+              x: width / 2 - ITEM_SIZE / 2,
+              y: height / 2 - ITEM_SIZE / 2,
+            });
+            setAnimals((prev) =>
+              prev.map((a) =>
+                a.id === animal.id ? { ...a, inTray: true } : a
+              )
+            );
+          }
+        },
+        onPanResponderEnd: () => {
+          setIsDragging(false);
+        },
+        onPanResponderTerminate: () => {
+          setIsDragging(false);
+        },
+      });
     }
-  };
-
-  // Render drop zones at the positions defined by each animal.
-  // When an animal is correctly dropped, its image appears in the drop zone.
-  const renderDropZones = () => {
-    return animals.map((animal) => {
-      const isPlaced = placedAnimals.includes(animal.id);
-      return (
-        <DraxView
-          key={`drop-${animal.id}`}
-          style={[
-            styles.dropZone,
-            { top: animal.position.top, left: animal.position.left },
-          ]}
-          animateSnapback={false}
-          onReceiveDragDrop={(event) => {
-            console.log('Drop event on zone for:', animal.id, event);
-            const draggedId = event.dragged?.payload;
-            if (draggedId) {
-              handleReceiveDrop(draggedId, animal.id);
-            }
-          }}
-        >
-          {isPlaced && (
-            <Image source={animal.image} style={styles.animalImage} />
-          )}
-        </DraxView>
-      );
-    });
-  };
+  });
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <DraxProvider>
-        <View style={styles.container}>
-          {/* The map is placed in a ScrollView so that users can scroll vertically */}
-          <ScrollView style={styles.mapScroll} contentContainerStyle={styles.mapScrollContent}>
-            <View style={[styles.mapWrapper, { width }]}>
-              <Image
-                source={require('@/assets/images/Sea/ocean_map.png')}
-                style={styles.oceanMapImage}
-              />
-              {renderDropZones()}
-            </View>
-          </ScrollView>
+    <View style={styles.container}>
+      {/* SCROLLABLE MAP AREA */}
+      <ScrollView
+        style={styles.mapScroll}
+        scrollEnabled={!isDragging}
+        scrollEventThrottle={16}
+        onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
+      >
+        <View style={styles.mapContent}>
+          <Image
+            source={require('@/assets/images/Sea/ocean_map.png')}
+            style={styles.mapImage}
+          />
 
-          {/* The tray is overlayed at the bottom of the screen */}
-          <View style={styles.trayOverlay}>
-            <AnimalTray animals={animals} placedAnimals={placedAnimals} />
-          </View>
+          {/* Render animals on the map */}
+          {animals
+            .filter((animal) => !animal.inTray)
+            .map((animal) => (
+              <Animated.View
+                key={animal.id}
+                style={[
+                  styles.mapItem,
+                  {
+                    transform: [
+                      { translateX: animal.pan.x },
+                      { translateY: animal.pan.y },
+                    ],
+                  },
+                ]}
+                {...panResponders[animal.id].panHandlers}
+              >
+                <Image source={animal.image} style={styles.itemImage} />
+              </Animated.View>
+            ))}
         </View>
-      </DraxProvider>
-    </GestureHandlerRootView>
+      </ScrollView>
+
+      {/* TRAY AT THE BOTTOM */}
+      <View style={styles.trayContainer}>
+        <ScrollView
+          horizontal
+          contentContainerStyle={styles.trayContent}
+          showsHorizontalScrollIndicator={false}
+          scrollEnabled={!isDragging}
+        >
+          {animals
+            .filter((animal) => animal.inTray)
+            .map((animal) => (
+              <View
+                key={animal.id}
+                style={styles.trayItem}
+                {...panResponders[animal.id].panHandlers}
+              >
+                <Image source={animal.image} style={styles.itemImage} />
+                <Text style={styles.itemLabel}>Animal {animal.id}</Text>
+              </View>
+            ))}
+        </ScrollView>
+      </View>
+
+      {/* Trash Box on the left, right on top of the tray */}
+      <View style={styles.trashContainer}>
+        <Text style={styles.trashLabel}>Trash</Text>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#A1CEDC',
   },
   mapScroll: {
     flex: 1,
   },
-  // Add some bottom padding so the scrollable map does not get hidden behind the tray
-  mapScrollContent: {
-    paddingBottom: 150,
+  mapContent: {
+    width: '100%',
+    height: MAP_CONTENT_HEIGHT,
   },
-  mapWrapper: {
-    position: 'relative',
-    height: 1000, // adjust as needed for your map
-  },
-  oceanMapImage: {
+  mapImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'contain',
+    resizeMode: 'cover',
   },
-  dropZone: {
+  mapItem: {
     position: 'absolute',
-    width: 80,
-    height: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: ITEM_SIZE,
+    height: ITEM_SIZE,
   },
-  animalImage: {
-    width: '100%',
-    height: '100%',
+  itemImage: {
+    width: ITEM_SIZE,
+    height: ITEM_SIZE,
     resizeMode: 'contain',
   },
-  // Overlay the tray fixed at the bottom
-  trayOverlay: {
+  itemLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  trayContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    height: TRAY_HEIGHT,
+    backgroundColor: '#fff',
+  },
+  trayContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 10,
+  },
+  trayItem: {
+    marginHorizontal: 8,
+    backgroundColor: '#eee',
+    alignItems: 'center',
+  },
+  trashContainer: {
+    position: 'absolute',
+    width: TRASH_SIZE,
+    height: TRASH_SIZE,
+    left: trashBoxLeft,
+    top: trashBoxTop,
+    backgroundColor: 'red',
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trashLabel: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 12,
   },
 });

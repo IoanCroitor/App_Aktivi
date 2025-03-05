@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Image,
   PanResponder,
+  PanResponderInstance,
   Animated,
   Dimensions,
   ScrollView,
@@ -13,28 +14,13 @@ import {
   ImageBackground,
 } from 'react-native';
 
-const IMAGES = [
-  require('@/assets/images/Sea/1.png'),
-  require('@/assets/images/Sea/2.png'),
-  require('@/assets/images/Sea/3.png'),
-  require('@/assets/images/Sea/4.png'),
-  require('@/assets/images/Sea/5.png'),
-  require('@/assets/images/Sea/6.png'),
-  require('@/assets/images/Sea/7.png'),
-  require('@/assets/images/Sea/8.png'),
-  require('@/assets/images/Sea/9.png'),
-  require('@/assets/images/Sea/10.png'),
-];
-
 const { width, height } = Dimensions.get('window');
-
-// Configuration
+const TOP_OFFSET = 44;
 const ITEM_SIZE = 80;
 const TRAY_HEIGHT = 200;
 const TRASH_SIZE = 30;
 const MAP_CONTENT_HEIGHT = 1000;
 
-// Position the trash box on the left, right above the tray
 const trashBoxLeft = 20;
 const trashBoxTop = height - TRAY_HEIGHT - TRASH_SIZE;
 const trashBox = {
@@ -44,15 +30,30 @@ const trashBox = {
   height: TRASH_SIZE,
 };
 
-/**
- * Example placeholders:
- * Each has an id, position (x, y), and size (width, height).
- * If an animal with the same id is dropped here, we award 3 points.
- */
+const IMAGES = [
+  { id: 1, source: require('@/assets/images/Sea/1.png') },
+  { id: 2, source: require('@/assets/images/Sea/2.png') },
+  { id: 3, source: require('@/assets/images/Sea/3.png') },
+  { id: 4, source: require('@/assets/images/Sea/5.png') },
+  { id: 5, source: require('@/assets/images/Sea/4.png') },
+  { id: 6, source: require('@/assets/images/Sea/6.png') },
+  { id: 7, source: require('@/assets/images/Sea/8.png') },
+  { id: 8, source: require('@/assets/images/Sea/9.png') },
+  { id: 9, source: require('@/assets/images/Sea/11.png') },
+  { id: 10, source: require('@/assets/images/Sea/12.png') },
+];
+
 const placeholders = [
-  { id: 1, x: 100, y: 200, width: 60, height: 60 },
-  { id: 2, x: 250, y: 300, width: 60, height: 60 },
-  // Add more as needed...
+  { id: 1, x: 75,  y: 100,  width: 60, height: 60 },
+  { id: 2, x: 200, y: 100,  width: 60, height: 60 },
+  { id: 3, x: 300, y: 90,   width: 60, height: 60 },
+  { id: 4, x: 130, y: 200,  width: 60, height: 60 },
+  { id: 5, x: 300, y: 200,  width: 60, height: 60 },
+  { id: 6, x: 250, y: 290,  width: 60, height: 60 },
+  { id: 7, x: 120, y: 280,  width: 60, height: 60 },
+  { id: 8, x: 140, y: 330,  width: 60, height: 60 },
+  { id: 9, x: 220, y: 540,  width: 60, height: 60 },
+  { id: 10, x: 120, y: 600,  width: 60, height: 60 },
 ];
 
 type AnimalData = {
@@ -65,22 +66,16 @@ type AnimalData = {
 export default function PanResponderPlaceholdersWithScore() {
   const [isDragging, setIsDragging] = useState(false);
   const [scrollY, setScrollY] = useState(0);
-
-  // Scoreboard
   const [score, setScore] = useState(0);
-
-  // Double-tap logic
   const [selectedAnimal, setSelectedAnimal] = useState<AnimalData | null>(null);
   const [successAnimal, setSuccessAnimal] = useState<AnimalData | null>(null);
   const lastTapTime = useRef<number>(0);
 
-  // Our animals
   const [animals, setAnimals] = useState<AnimalData[]>(() =>
-    IMAGES.map((img, index) => ({
-      id: index + 1,
-      image: img,
+    IMAGES.map((imgObj) => ({
+      id: imgObj.id,
+      image: imgObj.source,
       inTray: true,
-      // Start them centered by default
       pan: new Animated.ValueXY({
         x: width / 2 - ITEM_SIZE / 2,
         y: height / 2 - ITEM_SIZE / 2,
@@ -88,47 +83,40 @@ export default function PanResponderPlaceholdersWithScore() {
     }))
   );
 
-  // PanResponders
-  const panResponders = useRef<{ [key: number]: PanResponder }>(() => ({})).current;
+  const panResponders = useRef<{ [key: number]: PanResponderInstance }>({}).current;
 
-  // Trash box check
   const isInTrashBox = (x: number, y: number) =>
     x >= trashBox.x &&
     x <= trashBox.x + trashBox.width &&
     y >= trashBox.y &&
     y <= trashBox.y + trashBox.height;
 
-  // Find placeholder if dropping inside its bounding box
+  // Given a point, check if it falls within any placeholder.
+  // Returns the placeholder's id if found; otherwise, null.
   const findMatchingPlaceholder = (x: number, y: number): number | null => {
     for (const p of placeholders) {
       const inBox =
-        x >= p.x && x <= p.x + p.width && y >= p.y && y <= p.y + p.height;
-      if (inBox) {
-        return p.id; // returns the placeholder's ID
-      }
+        x >= p.x && x <= p.x + p.width &&
+        y >= p.y && y <= p.y + p.height;
+      if (inBox) return p.id;
     }
     return null;
   };
 
-  // Double tap detection
   const checkDoubleTap = (animal: AnimalData) => {
     const now = Date.now();
     if (now - lastTapTime.current < 300) {
-      // Double tap
       setSelectedAnimal(animal);
     }
     lastTapTime.current = now;
   };
 
-  // "Delete" function from pop-up
   const handleDeleteAnimal = () => {
     if (!selectedAnimal) return;
-    // reset position
     selectedAnimal.pan.setValue({
       x: width / 2 - ITEM_SIZE / 2,
       y: height / 2 - ITEM_SIZE / 2,
     });
-    // put it back in tray
     setAnimals((prev) =>
       prev.map((a) =>
         a.id === selectedAnimal.id ? { ...a, inTray: true } : a
@@ -137,52 +125,54 @@ export default function PanResponderPlaceholdersWithScore() {
     setSelectedAnimal(null);
   };
 
-  // Create PanResponder for each animal
+  // For each animal, create a PanResponder that calculates a grab offset
   animals.forEach((animal) => {
     if (!panResponders[animal.id]) {
-      // For each item, track the finger exactly via gestureState.moveX/moveY
+      let dragOffset = { x: 0, y: 0 };
       panResponders[animal.id] = PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
 
-        onPanResponderGrant: () => {
+        onPanResponderGrant: (evt) => {
           setIsDragging(true);
           checkDoubleTap(animal);
 
-          // If the animal is in the tray, move it to the middle of the page
           if (animal.inTray) {
-            // Mark it not in tray
+            // For tray animals, remove them from the tray and snap to center.
             setAnimals((prev) =>
               prev.map((a) =>
                 a.id === animal.id ? { ...a, inTray: false } : a
               )
             );
-            // Instantly set the item to the screen center
             animal.pan.setValue({
               x: width / 2 - ITEM_SIZE / 2,
               y: height / 2 - ITEM_SIZE / 2,
             });
+            // Assume a center grab for tray animals.
+            dragOffset = { x: ITEM_SIZE / 2, y: ITEM_SIZE / 2 };
+          } else {
+            // For animals already on the map, record the touch offset within the image.
+            dragOffset = {
+              x: evt.nativeEvent.locationX,
+              y: evt.nativeEvent.locationY,
+            };
           }
         },
 
         onPanResponderMove: (evt, gestureState) => {
-          // Move the item so it follows the finger exactly
-          // Subtract half size so the finger is in the item's center
-          const fingerX = gestureState.moveX - ITEM_SIZE / 2;
-          const fingerY = gestureState.moveY - ITEM_SIZE / 2;
+          // Maintain the initial grab offset so the same point on the animal stays under your finger.
+          const fingerX = gestureState.moveX - dragOffset.x;
+          const fingerY = gestureState.moveY - TOP_OFFSET - dragOffset.y;
           animal.pan.setValue({ x: fingerX, y: fingerY });
         },
 
         onPanResponderRelease: (evt, gestureState) => {
           setIsDragging(false);
+          const finalX = gestureState.moveX - dragOffset.x;
+          const finalY = gestureState.moveY - TOP_OFFSET - dragOffset.y + scrollY;
 
-          // finalX/finalY in map coordinates (account for scroll)
-          const finalX = gestureState.moveX - ITEM_SIZE / 2;
-          const finalY = gestureState.moveY - ITEM_SIZE / 2 + scrollY;
-
-          // 1) Check trash box
+          // Check if dropped in the trash box.
           if (isInTrashBox(finalX, finalY)) {
-            // Return to tray
             animal.pan.setValue({
               x: width / 2 - ITEM_SIZE / 2,
               y: height / 2 - ITEM_SIZE / 2,
@@ -195,19 +185,18 @@ export default function PanResponderPlaceholdersWithScore() {
             return;
           }
 
-          // 2) Check placeholders
+          // Check if dropped over a placeholder.
           const placeholderId = findMatchingPlaceholder(finalX, finalY);
-          if (placeholderId && placeholderId === animal.id) {
-            // The correct animal is placed on the correct placeholder
+          if (placeholderId !== null && placeholderId === animal.id) {
             setSuccessAnimal(animal);
-            setScore((prev) => prev + 3); // Award 3 points
-            // Snap exactly to placeholder
+            setScore((prev) => prev + 3);
             const p = placeholders.find((pl) => pl.id === animal.id);
             if (p) {
               animal.pan.setValue({ x: p.x, y: p.y });
             }
           }
         },
+
         onPanResponderEnd: () => {
           setIsDragging(false);
         },
@@ -220,7 +209,7 @@ export default function PanResponderPlaceholdersWithScore() {
 
   return (
     <View style={styles.container}>
-      {/* SCOREBOARD at top-left */}
+      {/* Scoreboard */}
       <View style={styles.scoreboard}>
         <Text style={styles.scoreText}>Score: {score}</Text>
       </View>
@@ -266,7 +255,7 @@ export default function PanResponderPlaceholdersWithScore() {
         </View>
       </Modal>
 
-      {/* SCROLLABLE MAP AREA with an ImageBackground */}
+      {/* Scrollable map */}
       <ScrollView
         style={styles.mapScroll}
         scrollEnabled={!isDragging}
@@ -275,35 +264,35 @@ export default function PanResponderPlaceholdersWithScore() {
       >
         <View style={styles.mapContent}>
           <ImageBackground
-            source={require('@/assets/images/Sea/ocean_map.png')} // Your background image
+            source={require('@/assets/images/Sea/ocean_map.png')}
             style={styles.mapBackground}
           >
-            {/* RENDER PLACEHOLDERS */}
+            {/* Render placeholders for drop detection.
+                They are hidden from view and do not block touch events. */}
             {placeholders.map((p) => (
               <View
                 key={p.id}
-                style={[
-                  styles.placeholder,
-                  {
-                    left: p.x,
-                    top: p.y,
-                    width: p.width,
-                    height: p.height,
-                  },
-                ]}
-              >
-                <Text style={{ color: '#888' }}>ID {p.id}</Text>
-              </View>
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: p.x,
+                  top: p.y,
+                  width: p.width,
+                  height: p.height,
+                  backgroundColor: 'transparent',
+                  // Uncomment the following lines for debugging:
+                  // borderWidth: 1,
+                  // borderColor: 'rgba(0,0,0,0.2)',
+                }}
+              />
             ))}
 
-            {/* Render animals on the map */}
+            {/* Animals on the map */}
             {animals
               .filter((animal) => !animal.inTray)
               .map((animal) => (
                 <Animated.View
                   key={animal.id}
-                  // The transform subtracts nothing now,
-                  // because we do that math in onPanResponderMove
                   style={[
                     styles.mapItem,
                     {
@@ -322,7 +311,7 @@ export default function PanResponderPlaceholdersWithScore() {
         </View>
       </ScrollView>
 
-      {/* TRAY AT THE BOTTOM */}
+      {/* Tray for animals */}
       <View style={styles.trayContainer}>
         <ScrollView
           horizontal
@@ -345,7 +334,7 @@ export default function PanResponderPlaceholdersWithScore() {
         </ScrollView>
       </View>
 
-      {/* Trash Box on the left, right on top of the tray */}
+      {/* Trash box */}
       <View style={styles.trashContainer}>
         <Text style={styles.trashLabel}>Trash</Text>
       </View>
@@ -354,9 +343,7 @@ export default function PanResponderPlaceholdersWithScore() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   scoreboard: {
     position: 'absolute',
     top: 30,
@@ -366,44 +353,22 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 8,
   },
-  scoreText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  mapScroll: {
-    flex: 1,
-  },
-  mapContent: {
-    width: '100%',
-    height: MAP_CONTENT_HEIGHT,
-  },
+  scoreText: { fontSize: 16, fontWeight: 'bold' },
+  mapScroll: { flex: 1 },
+  mapContent: { width: '100%', height: MAP_CONTENT_HEIGHT },
   mapBackground: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  placeholder: {
-    position: 'absolute',
-    borderWidth: 1,
-    borderColor: '#888',
-    backgroundColor: 'rgba(200,200,200,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  mapItem: {
-    position: 'absolute',
-    width: ITEM_SIZE,
-    height: ITEM_SIZE,
-  },
+  placeholder: { position: 'absolute' },
+  mapItem: { position: 'absolute', width: ITEM_SIZE, height: ITEM_SIZE },
   itemImage: {
     width: ITEM_SIZE,
     height: ITEM_SIZE,
     resizeMode: 'contain',
   },
-  itemLabel: {
-    fontSize: 12,
-    textAlign: 'center',
-  },
+  itemLabel: { fontSize: 12, textAlign: 'center' },
   trayContainer: {
     position: 'absolute',
     bottom: 0,
@@ -438,8 +403,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 12,
   },
-
-  // MODAL
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
